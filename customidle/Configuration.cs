@@ -8,8 +8,10 @@ namespace Idler
     public class Configuration : IPluginConfiguration
     {
         public int Version { get; set; } = 0;
-        public string Emote { get; set; } = string.Empty;
+        public string Emote { get; set; } = string.Empty; // Legacy support
+        public uint EmoteId { get; set; } = 0; // New: Store emote ID
         public bool Unsheathed { get; set; } = true;
+        public int IdleDelaySeconds { get; set; } = 0; // Delay before performing emote after becoming idle
 
         [NonSerialized]
         private IDalamudPluginInterface? PluginInterface;

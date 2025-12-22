@@ -21,11 +21,15 @@ namespace Idler
         public Configuration Configuration { get; init; }
         public WindowSystem WindowSystem = new("Idler");
         private ConfigWindow ConfigWindow { get; init; }
+        private GameEmotes GameEmotes { get; init; }
         private bool IsMoving() => AgentMap.Instance()->IsPlayerMoving;
         private bool InCombat => Service.Condition[ConditionFlag.InCombat];
         private bool IsJumping => Service.Condition[ConditionFlag.Jumping];
         private bool IsBetweenAreas => Service.Condition[ConditionFlag.BetweenAreas] && Service.Condition[ConditionFlag.BetweenAreas51];
-        private string Emote => Configuration.Emote;
+        
+        // Delay tracking
+        private DateTime? IdleStartTime { get; set; } = null;
+        private bool HasPerformedEmoteThisIdle { get; set; } = false;
 
         public Plugin(
             IDalamudPluginInterface pluginInterface,
@@ -37,6 +41,7 @@ namespace Idler
             this.Configuration = this.PluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
             this.Configuration.Initialize(this.PluginInterface);
             ECommonsMain.Init(pluginInterface, this, Module.All);
+            this.GameEmotes = new GameEmotes();
             Service.Framework.Update += onFrameworkUpdate;
 
             ConfigWindow = new ConfigWindow(this);
@@ -52,39 +57,66 @@ namespace Idler
 
         public unsafe void onFrameworkUpdate(object framework)
         {
-            //There is most definitely a nicer way of handling this.
-            if (emoteCooldown && CanPerformEmote())
+            // Check if we should perform emote
+            if (Configuration.EmoteId == 0) return; // No emote selected
+
+            var emote = GameEmotes.GetEmote(Configuration.EmoteId);
+            if (!emote.HasValue) return;
+
+            // Check weapon state
+            bool weaponUnsheathed = IsWeaponUnsheathed();
+            if (weaponUnsheathed && !Configuration.Unsheathed)
             {
-                if (EmoteList.IsValidEmote(Emote) && !IsWeaponUnsheathed() && this.Configuration.Unsheathed)
+                // Reset idle state if weapon is unsheathed and we don't want to emote while unsheathed
+                if (IsMoving())
                 {
-                    Chat.SendMessage(Emote);
-                    emoteCooldown = false;
+                    IdleStartTime = null;
+                    HasPerformedEmoteThisIdle = false;
                 }
-
-                else if (EmoteList.IsValidEmote(Emote) && !IsWeaponUnsheathed() && !this.Configuration.Unsheathed)
-                {
-                    Chat.SendMessage(Emote);
-                    emoteCooldown = false;
-                }
-
-                else if (EmoteList.IsValidEmote(Emote) && IsWeaponUnsheathed() && this.Configuration.Unsheathed)
-                {
-                    Chat.SendMessage(Emote);
-                    emoteCooldown = false;
-                }
-
-                else if (EmoteList.IsValidEmote(Emote) && IsWeaponUnsheathed() && !this.Configuration.Unsheathed)
-                {
-                    return;
-                }
+                return;
             }
-            else if (!emoteCooldown && IsMoving())
+
+            // Check if we can perform emote
+            if (!CanPerformEmote())
             {
-                emoteCooldown = true;
+                // Reset idle state if we can't perform emote
+                IdleStartTime = null;
+                HasPerformedEmoteThisIdle = false;
+                return;
+            }
+
+            // Check if we're idle (not moving)
+            if (IsMoving())
+            {
+                // Reset idle state when moving
+                IdleStartTime = null;
+                HasPerformedEmoteThisIdle = false;
+                return;
+            }
+
+            // We're idle - start or update idle timer
+            if (IdleStartTime == null)
+            {
+                IdleStartTime = DateTime.Now;
+                HasPerformedEmoteThisIdle = false;
+            }
+
+            // Check if delay has passed
+            if (!HasPerformedEmoteThisIdle && IdleStartTime.HasValue)
+            {
+                var idleDuration = (DateTime.Now - IdleStartTime.Value).TotalSeconds;
+                if (idleDuration >= Configuration.IdleDelaySeconds)
+                {
+                    // Perform emote
+                    var emoteCommand = GameEmotes.GetEmoteCommand(emote.Value);
+                    if (!string.IsNullOrEmpty(emoteCommand))
+                    {
+                        Chat.SendMessage(emoteCommand);
+                        HasPerformedEmoteThisIdle = true;
+                    }
+                }
             }
         }
-        
-        private bool emoteCooldown = true; // emoteCooldown makes it so that it only sends the command once until you move again, otherwise it would spam send the command.
 
         private bool CanPerformEmote()
         {
