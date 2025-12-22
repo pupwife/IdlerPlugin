@@ -1,3 +1,9 @@
 [submodule "ECommons"]
 	path = ECommons
 	url = https://github.com/NightmareXIV/ECommons.git
+[submodule "CkCommons"]
+	path = CkCommons
+	url = https://github.com/CordeliaMist/CkCommons.git
+[submodule "OtterGui"]
+	path = OtterGui
+	url = https://github.com/Ottermandias/OtterGui.git
