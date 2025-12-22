@@ -8,21 +8,20 @@ using ECommons.Automation;
 using ECommons.SimpleGui;
 using FFXIVClientStructs.FFXIV.Client.Game.UI;
 using FFXIVClientStructs.FFXIV.Client.UI.Agent;
-using ImGuiScene;
 using System;
 
-namespace customidle
+namespace Idler
 {
     public sealed unsafe class Plugin : IDalamudPlugin
     {
-        public string Name => "Custom Idle";
-        private const string CommandName = "/customidle";
+        public string Name => "Idler";
+        private const string CommandName = "/idler";
         private IDalamudPluginInterface PluginInterface { get; init; }
         private ICommandManager CommandManager { get; init; }
         public Configuration Configuration { get; init; }
-        public WindowSystem WindowSystem = new("Custom Idle");
+        public WindowSystem WindowSystem = new("Idler");
         private ConfigWindow ConfigWindow { get; init; }
-        private bool IsMoving() => AgentMap.Instance()->IsPlayerMoving == 1;
+        private bool IsMoving() => AgentMap.Instance()->IsPlayerMoving;
         private bool InCombat => Service.Condition[ConditionFlag.InCombat];
         private bool IsJumping => Service.Condition[ConditionFlag.Jumping];
         private bool IsBetweenAreas => Service.Condition[ConditionFlag.BetweenAreas] && Service.Condition[ConditionFlag.BetweenAreas51];
@@ -53,26 +52,24 @@ namespace customidle
 
         public unsafe void onFrameworkUpdate(object framework)
         {
-            Chat sendEmote = new Chat();
-
             //There is most definitely a nicer way of handling this.
             if (emoteCooldown && CanPerformEmote())
             {
                 if (EmoteList.IsValidEmote(Emote) && !IsWeaponUnsheathed() && this.Configuration.Unsheathed)
                 {
-                    sendEmote.SendMessage(Emote);
+                    Chat.SendMessage(Emote);
                     emoteCooldown = false;
                 }
 
                 else if (EmoteList.IsValidEmote(Emote) && !IsWeaponUnsheathed() && !this.Configuration.Unsheathed)
                 {
-                    sendEmote.SendMessage(Emote);
+                    Chat.SendMessage(Emote);
                     emoteCooldown = false;
                 }
 
                 else if (EmoteList.IsValidEmote(Emote) && IsWeaponUnsheathed() && this.Configuration.Unsheathed)
                 {
-                    sendEmote.SendMessage(Emote);
+                    Chat.SendMessage(Emote);
                     emoteCooldown = false;
                 }
 

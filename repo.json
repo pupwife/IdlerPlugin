@@ -1,0 +1,24 @@
+[
+  {
+    "Author": "pupwife",
+    "Name": "Idler",
+    "InternalName": "Idler",
+    "AssemblyVersion": "0.0.0.1",
+    "Punchline": "Automatically plays an emote when you start idling in FFXIV",
+    "Description": "Automatically plays an emote when you start idling in FFXIV",
+    "ApplicableVersion": "any",
+    "Tags": [
+      "emote",
+      "idle"
+    ],
+    "IsHide": false,
+    "IsTestingExclusive": false,
+    "DownloadLinkInstall": "https://github.com/pupwife/IdlerPlugin/releases/latest/download/Idler.zip",
+    "DownloadLinkUpdate": "https://github.com/pupwife/IdlerPlugin/releases/latest/download/Idler.zip",
+    "DownloadLinkTesting": "https://github.com/pupwife/IdlerPlugin/releases/latest/download/Idler.zip",
+    "RepoUrl": "https://github.com/pupwife/IdlerPlugin",
+    "IconUrl": "https://raw.githubusercontent.com/pupwife/IdlerPlugin/master/images/icon.png",
+    "LastUpdate": "1764102883"
+  }
+]
+

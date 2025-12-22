@@ -1,7 +1,7 @@
-## Custom Idle
-Simple plugin that performs an emote when you stop moving while sheathed (and unsheathed if you so wish) 
+## Idler
+Simple plugin that automatically plays an emote when you start idling in FFXIV (while sheathed and optionally while unsheathed)
 
-![customidle](https://raw.githubusercontent.com/spooee/ffxiv_customidle/master/config.png)
+![Idler](config.png)
 ## Installation
 - Type ```/xlsettings``` in chat
 - Head to the "Experimental" tab

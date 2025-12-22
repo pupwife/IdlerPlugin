@@ -1,17 +1,22 @@
 <?xml version="1.0" encoding="utf-8"?>
-<Project Sdk="Microsoft.NET.Sdk">
-  <Import Project="Dalamud.Plugin.Bootstrap.targets"/>
+<Project Sdk="Dalamud.NET.Sdk/14.0.1">
 
   <PropertyGroup>
-    <Version>0.0.0.1</Version>
-    <Description>Performs an emote when you stop moving while sheathed (and unsheathed)</Description>
-    <Copyright></Copyright>
-    <PackageProjectUrl>https://github.com/goatcorp/SamplePlugin</PackageProjectUrl>
-    <PackageLicenseExpression>AGPL-3.0-or-later</PackageLicenseExpression>
-    <IsPackable>false</IsPackable>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <LangVersion>14</LangVersion>
+    <Author>pupwife</Author>
+    <Name>Idler</Name>
+    <InternalName>Idler</InternalName>
+    <AssemblyVersion>0.0.0.1</AssemblyVersion>
+    <MinimumDalamudVersion>14.0.0</MinimumDalamudVersion>
+    <Punchline>Automatically plays an emote when you start idling in FFXIV</Punchline>
+    <Description>Automatically plays an emote when you start idling in FFXIV</Description>
+    <ApplicableVersion>any</ApplicableVersion>
+    <Tags>emote;idle</Tags>
+    <DalamudApiLevel>14</DalamudApiLevel>
   </PropertyGroup>
 
-    <ItemGroup>
-        <ProjectReference Include="..\ECommons\ECommons\ECommons.csproj" />
-    </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\ECommons\ECommons\ECommons.csproj" />
+  </ItemGroup>
 </Project>

@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 
-namespace customidle
+namespace Idler
 {
     public static class EmoteList
     {

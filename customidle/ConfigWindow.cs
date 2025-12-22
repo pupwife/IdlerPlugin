@@ -1,16 +1,16 @@
 using System;
 using Dalamud.Interface.Windowing;
-using ImGuiNET;
+using Dalamud.Bindings.ImGui;
 using System.Numerics;
 
-namespace customidle
+namespace Idler
 {
     public class ConfigWindow : Window, IDisposable
     {
         private Configuration Configuration;
 
         public ConfigWindow(Plugin plugin) : base(
-            "Custom Idle",
+            "Idler",
             ImGuiWindowFlags.NoResize | ImGuiWindowFlags.NoCollapse | ImGuiWindowFlags.NoScrollbar |
             ImGuiWindowFlags.NoScrollWithMouse)
         {

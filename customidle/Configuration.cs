@@ -2,7 +2,7 @@ using Dalamud.Configuration;
 using Dalamud.Plugin;
 using System;
 
-namespace customidle
+namespace Idler
 {
     [Serializable]
     public class Configuration : IPluginConfiguration
