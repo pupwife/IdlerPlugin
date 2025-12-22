@@ -29,69 +29,113 @@ namespace Idler
             this.Configuration = plugin.Configuration;
             this.Plugin = plugin;
             this.GameEmotes = new GameEmotes();
-            this.AllEmotes = GameEmotes.GetAllEmotes().ToList();
-            this.FilteredEmotes = new List<Emote>(AllEmotes);
-            UpdateEmoteNames();
             
-            // Find current emote index if EmoteId is set
-            if (this.Configuration.EmoteId > 0)
+            try
             {
-                var currentEmote = GameEmotes.GetEmote(this.Configuration.EmoteId);
-                if (currentEmote.HasValue)
+                this.AllEmotes = GameEmotes.GetAllEmotes().ToList();
+                this.FilteredEmotes = new List<Emote>(AllEmotes);
+                UpdateEmoteNames();
+                
+                // Find current emote index if EmoteId is set
+                if (this.Configuration.EmoteId > 0)
                 {
-                    SelectedEmoteIndex = FilteredEmotes.FindIndex(e => e.RowId == currentEmote.Value.RowId);
+                    var currentEmote = GameEmotes.GetEmote(this.Configuration.EmoteId);
+                    if (currentEmote.HasValue)
+                    {
+                        SelectedEmoteIndex = FilteredEmotes.FindIndex(e => e.RowId == currentEmote.Value.RowId);
+                    }
                 }
+            }
+            catch (Exception ex)
+            {
+                // If emote loading fails, initialize with empty lists
+                Service.Log.Error($"Failed to load emotes: {ex.Message}");
+                this.AllEmotes = new List<Emote>();
+                this.FilteredEmotes = new List<Emote>();
+                this.EmoteNames = Array.Empty<string>();
             }
         }
 
         private void UpdateEmoteNames()
         {
-            if (string.IsNullOrEmpty(FilterText))
+            try
             {
-                FilteredEmotes = new List<Emote>(AllEmotes);
-            }
-            else
-            {
-                FilteredEmotes = AllEmotes.Where(e => 
+                if (string.IsNullOrEmpty(FilterText))
                 {
-                    var name = e.Name.ToString().ToLower();
-                    var command = GameEmotes.GetEmoteCommand(e).ToLower();
-                    return name.Contains(FilterText.ToLower()) || command.Contains(FilterText.ToLower());
-                }).ToList();
-            }
-            
-            EmoteNames = FilteredEmotes.Select(e => 
-            {
-                var command = GameEmotes.GetEmoteCommand(e);
-                var unlocked = IsEmoteUnlocked(e);
-                var status = unlocked ? "[✓]" : "[✗]";
-                return $"{status} {e.Name} ({command})";
-            }).ToArray();
-            
-            // Update selected index to match filtered list
-            if (this.Configuration.EmoteId > 0)
-            {
-                var currentEmote = GameEmotes.GetEmote(this.Configuration.EmoteId);
-                if (currentEmote.HasValue)
-                {
-                    SelectedEmoteIndex = FilteredEmotes.FindIndex(e => e.RowId == currentEmote.Value.RowId);
+                    FilteredEmotes = new List<Emote>(AllEmotes);
                 }
                 else
                 {
-                    SelectedEmoteIndex = -1;
+                    FilteredEmotes = AllEmotes.Where(e => 
+                    {
+                        try
+                        {
+                            var name = e.Name.ToString().ToLower();
+                            var command = GameEmotes.GetEmoteCommand(e).ToLower();
+                            return name.Contains(FilterText.ToLower()) || command.Contains(FilterText.ToLower());
+                        }
+                        catch
+                        {
+                            return false;
+                        }
+                    }).ToList();
                 }
+                
+                EmoteNames = FilteredEmotes.Select(e => 
+                {
+                    try
+                    {
+                        var command = GameEmotes.GetEmoteCommand(e);
+                        var unlocked = IsEmoteUnlocked(e);
+                        var status = unlocked ? "[✓]" : "[✗]";
+                        var emoteName = e.Name.ToString();
+                        return $"{status} {emoteName} ({command})";
+                    }
+                    catch
+                    {
+                        return "[?] Unknown Emote";
+                    }
+                }).ToArray();
+                
+                // Update selected index to match filtered list
+                if (this.Configuration.EmoteId > 0)
+                {
+                    var currentEmote = GameEmotes.GetEmote(this.Configuration.EmoteId);
+                    if (currentEmote.HasValue)
+                    {
+                        SelectedEmoteIndex = FilteredEmotes.FindIndex(e => e.RowId == currentEmote.Value.RowId);
+                    }
+                    else
+                    {
+                        SelectedEmoteIndex = -1;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Service.Log.Error($"Error updating emote names: {ex.Message}");
+                EmoteNames = Array.Empty<string>();
+                FilteredEmotes = new List<Emote>();
             }
         }
 
         private bool IsEmoteUnlocked(Emote emote)
         {
-            // Simplified check - for now, assume all emotes are available if player is logged in
-            // Actual unlock checking would require checking achievements/quests via UnlockLink
-            if (Service.ObjectTable.LocalPlayer == null) return false;
-            
-            // For now, assume unlocked if player is logged in
-            // You can enhance this by checking actual unlock conditions based on emote.UnlockLink
-            return true;
+            try
+            {
+                // Simplified check - for now, assume all emotes are available if player is logged in
+                // Actual unlock checking would require checking achievements/quests via UnlockLink
+                if (Service.ObjectTable?.LocalPlayer == null) return false;
+                
+                // For now, assume unlocked if player is logged in
+                // You can enhance this by checking actual unlock conditions based on emote.UnlockLink
+                return true;
+            }
+            catch
+            {
+                // If we can't check, assume unlocked to avoid blocking the UI
+                return true;
+            }
         }
 
         public override void Draw()

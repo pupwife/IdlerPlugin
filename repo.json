@@ -3,7 +3,7 @@
     "Author": "pupwife",
     "Name": "Idler",
     "InternalName": "Idler",
-    "AssemblyVersion": "1.1.1.2",
+    "AssemblyVersion": "1.2.0.0",
     "Punchline": "Automatically plays an emote when you start idling in FFXIV",
     "Description": "Automatically plays an emote when you start idling in FFXIV",
     "ApplicableVersion": "any",

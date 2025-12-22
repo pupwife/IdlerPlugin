@@ -109,15 +109,24 @@ namespace Idler
         {
             try
             {
-                var textCommand = emote.TextCommand.Value;
-                if (textCommand.RowId > 0)
+                var textCommandRef = emote.TextCommand;
+                if (textCommandRef.Value.RowId > 0)
                 {
+                    var textCommand = textCommandRef.Value;
                     return textCommand.Command.ToString();
                 }
             }
-            catch
+            catch (Exception ex)
             {
-                // TextCommand might not be available
+                // TextCommand might not be available or accessible
+                try
+                {
+                    Service.Log?.Debug($"Could not get emote command for emote {emote.RowId}: {ex.Message}");
+                }
+                catch
+                {
+                    // Log might not be available during construction
+                }
             }
             return string.Empty;
         }
