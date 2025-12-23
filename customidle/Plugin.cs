@@ -9,6 +9,7 @@ using ECommons.SimpleGui;
 using FFXIVClientStructs.FFXIV.Client.Game.UI;
 using FFXIVClientStructs.FFXIV.Client.UI.Agent;
 using System;
+using CkCommons;
 
 namespace Idler
 {
@@ -38,6 +39,10 @@ namespace Idler
             this.PluginInterface = pluginInterface;
             this.CommandManager = commandManager;
             this.PluginInterface.Create<Service>(this);
+            
+            // Initialize CkCommons first (this creates CkCommons.Svc)
+            CkCommonsHost.Init(pluginInterface, this, CkLogFilter.None);
+            
             this.Configuration = this.PluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
             this.Configuration.Initialize(this.PluginInterface);
             ECommonsMain.Init(pluginInterface, this, Module.All);
@@ -66,7 +71,7 @@ namespace Idler
             // Check weapon state
             bool weaponUnsheathed = IsWeaponUnsheathed();
             if (weaponUnsheathed && !Configuration.Unsheathed)
-            {
+                {
                 // Reset idle state if weapon is unsheathed and we don't want to emote while unsheathed
                 if (IsMoving())
                 {
@@ -96,10 +101,10 @@ namespace Idler
 
             // We're idle - start or update idle timer
             if (IdleStartTime == null)
-            {
+                {
                 IdleStartTime = DateTime.Now;
                 HasPerformedEmoteThisIdle = false;
-            }
+                }
 
             // Check if delay has passed
             if (!HasPerformedEmoteThisIdle && IdleStartTime.HasValue)
@@ -132,6 +137,7 @@ namespace Idler
         {
             Service.Framework.Update -= onFrameworkUpdate;
             ECommonsMain.Dispose();
+            CkCommonsHost.Dispose();
         }
 
         private void OnCommand(string command, string args)

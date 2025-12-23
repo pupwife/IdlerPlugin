@@ -12,6 +12,7 @@ namespace Idler
         public uint EmoteId { get; set; } = 0; // New: Store emote ID
         public bool Unsheathed { get; set; } = true;
         public int IdleDelaySeconds { get; set; } = 0; // Delay before performing emote after becoming idle
+        public bool HideLockedEmotes { get; set; } = false; // Hide locked emotes from the list
 
         [NonSerialized]
         private IDalamudPluginInterface? PluginInterface;

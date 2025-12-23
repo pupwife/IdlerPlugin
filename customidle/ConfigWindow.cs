@@ -2,9 +2,19 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Dalamud.Interface.Windowing;
+using Dalamud.Interface.Utility;
+using Dalamud.Interface.Utility.Raii;
 using Dalamud.Bindings.ImGui;
 using System.Numerics;
 using Lumina.Excel.Sheets;
+using ECommons.ImGuiMethods;
+using Dalamud.Interface;
+using Dalamud.Interface.Colors;
+using Dalamud.Plugin;
+using FFXIVClientStructs.FFXIV.Client.Game.UI;
+using System.Runtime.CompilerServices;
+using CkCommons.Gui;
+using OtterGui;
 
 namespace Idler
 {
@@ -13,34 +23,65 @@ namespace Idler
         private Configuration Configuration;
         private Plugin Plugin;
         private GameEmotes GameEmotes;
-        private List<Emote> AllEmotes;
-        private List<Emote> FilteredEmotes;
+        private List<Emote> AllEmotes = new();
+        private List<Emote> FilteredEmotes = new();
         private string[] EmoteNames = Array.Empty<string>();
         private int SelectedEmoteIndex = -1;
         private string FilterText = string.Empty;
+        private string ComboSearchText = string.Empty;
+        private float IconSize;
+        
+        // Animation and styling
+        private float borderAnimationTime = 0f;
+        private float scrollPosition = 0f;
+        private float lastScrollPosition = 0f;
 
         public ConfigWindow(Plugin plugin) : base(
-            "Idler",
-            ImGuiWindowFlags.NoResize | ImGuiWindowFlags.NoCollapse | ImGuiWindowFlags.NoScrollbar |
-            ImGuiWindowFlags.NoScrollWithMouse)
+            "Idler Configuration",
+            ImGuiWindowFlags.None)
         {
-            this.Size = new Vector2(400, 400);
-            this.SizeCondition = ImGuiCond.Always;
+            this.Size = new Vector2(500, 400);
+            this.SizeCondition = ImGuiCond.FirstUseEver;
+            
+            // Compact size constraints - everything should fit without scrolling
+            this.SizeConstraints = new WindowSizeConstraints()
+            {
+                MinimumSize = new Vector2(450, 350),
+                MaximumSize = new Vector2(700, 500),
+            };
             this.Configuration = plugin.Configuration;
             this.Plugin = plugin;
             this.GameEmotes = new GameEmotes();
+            this.IconSize = ImGui.GetTextLineHeight();
             
             try
             {
-                this.AllEmotes = GameEmotes.GetAllEmotes().ToList();
-                this.FilteredEmotes = new List<Emote>(AllEmotes);
-                UpdateEmoteNames();
+                // Load all emotes and filter out invalid ones
+                this.AllEmotes = GameEmotes.GetAllEmotes()
+                    .Where(e => 
+                    {
+                        try
+                        {
+                            // Additional filtering: ensure emote has a valid command
+                            var command = GameEmotes.GetEmoteCommand(e);
+                            var name = GameEmotes.GetEmoteName(e);
+                            return !string.IsNullOrWhiteSpace(name) && e.RowId > 0;
+                        }
+                        catch
+                        {
+                            return false;
+                        }
+                    })
+                    .ToList();
+                
+                // Sort and filter emotes
+                UpdateEmoteList();
                 
                 // Find current emote index if EmoteId is set
                 if (this.Configuration.EmoteId > 0)
                 {
                     var currentEmote = GameEmotes.GetEmote(this.Configuration.EmoteId);
-                    if (currentEmote.HasValue)
+                    if (currentEmote.HasValue && FilteredEmotes != null)
                     {
                         SelectedEmoteIndex = FilteredEmotes.FindIndex(e => e.RowId == currentEmote.Value.RowId);
                     }
@@ -56,39 +97,92 @@ namespace Idler
             }
         }
 
-        private void UpdateEmoteNames()
+        private void UpdateEmoteList()
         {
             try
             {
-                if (string.IsNullOrEmpty(FilterText))
+                // Start with all emotes
+                var emotesToShow = AllEmotes.AsEnumerable();
+
+                // Apply search filter if present
+                if (!string.IsNullOrEmpty(ComboSearchText))
                 {
-                    FilteredEmotes = new List<Emote>(AllEmotes);
-                }
-                else
-                {
-                    FilteredEmotes = AllEmotes.Where(e => 
+                    emotesToShow = emotesToShow.Where(e => 
                     {
                         try
                         {
-                            var name = e.Name.ToString().ToLower();
+                            var name = GameEmotes.GetEmoteName(e).ToLower();
                             var command = GameEmotes.GetEmoteCommand(e).ToLower();
-                            return name.Contains(FilterText.ToLower()) || command.Contains(FilterText.ToLower());
+                            var searchLower = ComboSearchText.ToLower();
+                            
+                            if (name.Contains(searchLower) || command.Contains(searchLower))
+                                return true;
+                            
+                            // Also check if search is a number matching the emote ID
+                            if (ushort.TryParse(ComboSearchText, out var searchId) && searchId == e.RowId)
+                                return true;
+                            
+                            return false;
                         }
                         catch
                         {
                             return false;
                         }
-                    }).ToList();
+                    });
                 }
+
+                // Filter out locked emotes if the option is enabled
+                if (Configuration.HideLockedEmotes)
+                {
+                    emotesToShow = emotesToShow.Where(e => 
+                    {
+                        try
+                        {
+                            return GameEmotes.IsEmoteUnlocked(e.RowId);
+                        }
+                        catch
+                        {
+                            return false;
+                        }
+                    });
+                }
+
+                // Sort: unlocked first (alphabetical), then locked (alphabetical)
+                FilteredEmotes = emotesToShow
+                    .OrderBy(e => 
+                    {
+                        try
+                        {
+                            var unlocked = GameEmotes.IsEmoteUnlocked(e.RowId);
+                            return unlocked ? 0 : 1; // 0 = unlocked (first), 1 = locked (second)
+                        }
+                        catch
+                        {
+                            return 1; // Treat errors as locked
+                        }
+                    })
+                    .ThenBy(e => 
+                    {
+                        try
+                        {
+                            return GameEmotes.GetEmoteName(e);
+                        }
+                        catch
+                        {
+                            return "zzz"; // Put errors at the end
+                        }
+                    })
+                    .ToList();
                 
+                // Update emote names array for display
                 EmoteNames = FilteredEmotes.Select(e => 
                 {
                     try
                     {
                         var command = GameEmotes.GetEmoteCommand(e);
-                        var unlocked = IsEmoteUnlocked(e);
+                        var unlocked = GameEmotes.IsEmoteUnlocked(e.RowId);
                         var status = unlocked ? "[✓]" : "[✗]";
-                        var emoteName = e.Name.ToString();
+                        var emoteName = GameEmotes.GetEmoteName(e);
                         return $"{status} {emoteName} ({command})";
                     }
                     catch
@@ -113,94 +207,643 @@ namespace Idler
             }
             catch (Exception ex)
             {
-                Service.Log.Error($"Error updating emote names: {ex.Message}");
+                Service.Log.Error($"Error updating emote list: {ex.Message}");
                 EmoteNames = Array.Empty<string>();
                 FilteredEmotes = new List<Emote>();
             }
         }
 
-        private bool IsEmoteUnlocked(Emote emote)
+
+        private bool DrawIconTextFrame(uint iconId, string text, bool hoverColor = false)
         {
-            try
+            var pos = ImGui.GetCursorScreenPos();
+            var size = new Vector2(IconSize) + ImGui.GetStyle().FramePadding * 2;
+            var frameSize = new Vector2(ImGui.CalcItemWidth(), ImGui.GetFrameHeight());
+            var isHovered = ImGui.IsMouseHoveringRect(pos, pos + frameSize);
+
+            // Use cute theme colors for hover
+            var bgColor = isHovered && hoverColor 
+                ? CuteTheme.FrameBgHovered 
+                : CuteTheme.FrameBg;
+            
+            using (ImRaii.PushColor(ImGuiCol.FrameBg, bgColor))
             {
-                // Simplified check - for now, assume all emotes are available if player is logged in
-                // Actual unlock checking would require checking achievements/quests via UnlockLink
-                if (Service.ObjectTable?.LocalPlayer == null) return false;
-                
-                // For now, assume unlocked if player is logged in
-                // You can enhance this by checking actual unlock conditions based on emote.UnlockLink
-                return true;
+                if (ImGui.BeginChildFrame(ImGui.GetID($"iconTextFrame_{iconId}_{text}"), frameSize))
+                {
+                    var drawlist = ImGui.GetWindowDrawList();
+                    if (ThreadLoadImageHandler.TryGetIconTextureWrap(iconId, false, out var icon))
+                    {
+                        drawlist.AddImage(icon.Handle, pos, pos + new Vector2(size.Y));
+                    }
+                    var textSize = ImGui.CalcTextSize(text);
+                    var textColor = isHovered ? CuteTheme.AccentLavender : CuteTheme.Text;
+                    drawlist.AddText(pos + new Vector2(size.Y + ImGui.GetStyle().FramePadding.X, size.Y / 2f - textSize.Y / 2f), ImGui.GetColorU32(textColor), text);
+                    
+                    // Add cute border on hover
+                    if (isHovered && hoverColor)
+                    {
+                        var borderColor = CuteTheme.AccentPink;
+                        borderColor.W = 0.5f;
+                        drawlist.AddRect(pos, pos + frameSize, ImGui.GetColorU32(borderColor), 4f, ImDrawFlags.None, 2f);
+                    }
+                }
+                ImGui.EndChildFrame();
             }
-            catch
+            return ImGui.IsItemClicked();
+        }
+
+        private void DrawComboEmote(string id)
+        {
+            var previewEmote = Configuration.EmoteId > 0 ? GameEmotes.GetEmote(Configuration.EmoteId) : null;
+            var previewName = previewEmote.HasValue ? GameEmotes.GetEmoteName(previewEmote.Value) : "Select emote...";
+            var previewIcon = previewEmote.HasValue ? GameEmotes.GetEmoteIcon(previewEmote.Value) : 0u;
+
+            using (ImRaii.PushStyle(ImGuiStyleVar.ItemSpacing, Vector2.One * ImGuiHelpers.GlobalScale))
             {
-                // If we can't check, assume unlocked to avoid blocking the UI
-                return true;
+                if (ThreadLoadImageHandler.TryGetIconTextureWrap(previewIcon, false, out var iconPicture))
+                {
+                    ImGui.Image(iconPicture.Handle, new Vector2(IconSize));
+                }
+                else
+                {
+                    ImGui.Dummy(new Vector2(IconSize));
+                }
+                ImGui.SameLine();
+                ImGui.SetNextItemWidth(ImGui.GetContentRegionAvail().X);
+
+                if (ImGui.BeginCombo($"##{id}", previewName, ImGuiComboFlags.HeightLargest))
+                {
+                    if (ImGui.IsWindowAppearing())
+                    {
+                        ComboSearchText = string.Empty;
+                        ImGui.SetKeyboardFocusHere();
+                    }
+
+                    ImGui.SetNextItemWidth(ImGui.GetContentRegionAvail().X);
+                    if (ImGui.InputTextWithHint($"##{id}SearchInput", "Search...", ref ComboSearchText, 256))
+                    {
+                        // Update the filtered list when search text changes
+                        UpdateEmoteList();
+                    }
+
+                    if (ImGui.BeginChild($"##{id}SearchScroll", new Vector2(ImGui.GetContentRegionAvail().X, 300 * ImGuiHelpers.GlobalScale)))
+                    {
+                        using (ImRaii.PushColor(ImGuiCol.FrameBgHovered, ImGui.GetColorU32(ImGuiCol.ButtonHovered)))
+                        {
+                            // Use the filtered and sorted list
+                            foreach (var emote in FilteredEmotes)
+                            {
+                                try
+                                {
+                                    var emoteName = GameEmotes.GetEmoteName(emote);
+                                    var emoteCommand = GameEmotes.GetEmoteCommand(emote);
+                                    
+                                    // Skip if name or command is empty
+                                    if (string.IsNullOrWhiteSpace(emoteName))
+                                        continue;
+                                    
+                                    var displayText = string.IsNullOrEmpty(emoteCommand) ? emoteName : $"{emoteName} ({emoteCommand})";
+                                    var iconId = GameEmotes.GetEmoteIcon(emote);
+                                    var unlocked = GameEmotes.IsEmoteUnlocked(emote.RowId);
+                                    var status = unlocked ? "[✓]" : "[✗]";
+                                    var fullText = $"{status} {displayText}";
+
+                                    ImGui.SetNextItemWidth(ImGui.GetContentRegionAvail().X);
+                                    if (DrawIconTextFrame(iconId, fullText, true))
+                                    {
+                                        Configuration.EmoteId = emote.RowId;
+                                        Configuration.Emote = emoteCommand; // Keep for compatibility
+                                        Configuration.Save();
+                                        ImGui.CloseCurrentPopup();
+                                    }
+                                }
+                                catch
+                                {
+                                    // Skip emotes that cause errors
+                                }
+                            }
+                        }
+                        ImGui.EndChild();
+                    }
+                    ImGui.EndCombo();
+                }
             }
         }
 
-        public override void Draw()
+        // Cute dark mode color theme
+        private static class CuteTheme
         {
-            ImGui.Text("Select Emote:");
-            ImGui.Spacing();
-
-            // Filter input
-            ImGui.SetNextItemWidth(-1);
-            if (ImGui.InputTextWithHint("##Filter", "Search emotes...", ref FilterText, 256))
+            // Dark background colors
+            public static readonly Vector4 WindowBg = new Vector4(0.12f, 0.12f, 0.15f, 0.95f); // Dark purple-gray
+            public static readonly Vector4 ChildBg = new Vector4(0.10f, 0.10f, 0.13f, 0.90f);
+            public static readonly Vector4 FrameBg = new Vector4(0.15f, 0.15f, 0.18f, 0.80f);
+            public static readonly Vector4 FrameBgHovered = new Vector4(0.20f, 0.20f, 0.25f, 0.90f);
+            public static readonly Vector4 FrameBgActive = new Vector4(0.25f, 0.20f, 0.30f, 1.0f);
+            
+            // Cute pastel accent colors
+            public static readonly Vector4 AccentPink = new Vector4(1.0f, 0.6f, 0.8f, 1.0f);      // #FF99CC
+            public static readonly Vector4 AccentLavender = new Vector4(0.8f, 0.7f, 1.0f, 1.0f);  // #CCB3FF
+            public static readonly Vector4 AccentMint = new Vector4(0.6f, 0.95f, 0.85f, 1.0f);    // #99F2D9
+            public static readonly Vector4 AccentPeach = new Vector4(1.0f, 0.85f, 0.7f, 1.0f);    // #FFD9B3
+            public static readonly Vector4 AccentSky = new Vector4(0.7f, 0.9f, 1.0f, 1.0f);       // #B3E6FF
+            
+            // Text colors
+            public static readonly Vector4 Text = new Vector4(0.95f, 0.95f, 0.98f, 1.0f);
+            public static readonly Vector4 TextMuted = new Vector4(0.7f, 0.7f, 0.75f, 1.0f);
+            
+            // Border colors (animated)
+            public static Vector4 GetBorderColor(float time, float scrollDelta)
             {
-                UpdateEmoteNames();
+                // Create a gradient that shifts based on time and scroll
+                var baseHue = (time * 0.3f + scrollDelta * 5f) % 1f;
+                var r = 0.5f + 0.5f * (float)Math.Sin(baseHue * Math.PI * 2 + 0);
+                var g = 0.5f + 0.5f * (float)Math.Sin(baseHue * Math.PI * 2 + 2.09f);
+                var b = 0.5f + 0.5f * (float)Math.Sin(baseHue * Math.PI * 2 + 4.18f);
+                return new Vector4(r, g, b, 0.8f);
             }
-
-            ImGui.Spacing();
-
-            // Emote selection combo
-            ImGui.SetNextItemWidth(-1);
-            if (ImGui.Combo("##EmoteSelect", ref SelectedEmoteIndex, EmoteNames, EmoteNames.Length))
+            
+            // Button colors
+            public static readonly Vector4 Button = new Vector4(0.25f, 0.20f, 0.30f, 0.80f);
+            public static readonly Vector4 ButtonHovered = new Vector4(0.35f, 0.28f, 0.42f, 1.0f);
+            public static readonly Vector4 ButtonActive = new Vector4(0.45f, 0.35f, 0.52f, 1.0f);
+        }
+        
+        private const int ThemeColorCount = 18; // Theme colors pushed every frame
+        private bool ThemePushed = false;
+        
+        public override void PreDraw()
+        {
+            base.PreDraw();
+            
+            try
             {
-                if (SelectedEmoteIndex >= 0 && SelectedEmoteIndex < FilteredEmotes.Count)
+                // GagSpeak-style title bar colors (pink/magenta theme) - push every frame
+                ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, new Vector2(ImGui.GetStyle().WindowPadding.X, 0));
+                ImGui.PushStyleColor(ImGuiCol.TitleBg, new Vector4(0.331f, 0.081f, 0.169f, 0.803f));
+                ImGui.PushStyleColor(ImGuiCol.TitleBgActive, new Vector4(0.579f, 0.170f, 0.359f, 0.828f));
+                ThemePushed = true;
+                
+                // Apply cute dark mode theme
+                ImGui.PushStyleColor(ImGuiCol.WindowBg, CuteTheme.WindowBg);
+                ImGui.PushStyleColor(ImGuiCol.ChildBg, CuteTheme.ChildBg);
+                ImGui.PushStyleColor(ImGuiCol.FrameBg, CuteTheme.FrameBg);
+                ImGui.PushStyleColor(ImGuiCol.FrameBgHovered, CuteTheme.FrameBgHovered);
+                ImGui.PushStyleColor(ImGuiCol.FrameBgActive, CuteTheme.FrameBgActive);
+                ImGui.PushStyleColor(ImGuiCol.Text, CuteTheme.Text);
+                ImGui.PushStyleColor(ImGuiCol.Button, CuteTheme.Button);
+                ImGui.PushStyleColor(ImGuiCol.ButtonHovered, CuteTheme.ButtonHovered);
+                ImGui.PushStyleColor(ImGuiCol.ButtonActive, CuteTheme.ButtonActive);
+                ImGui.PushStyleColor(ImGuiCol.Header, CuteTheme.FrameBgHovered);
+                ImGui.PushStyleColor(ImGuiCol.HeaderHovered, CuteTheme.AccentLavender);
+                ImGui.PushStyleColor(ImGuiCol.HeaderActive, CuteTheme.AccentPink);
+                ImGui.PushStyleColor(ImGuiCol.CheckMark, CuteTheme.AccentMint);
+                ImGui.PushStyleColor(ImGuiCol.SliderGrab, CuteTheme.AccentPink);
+                ImGui.PushStyleColor(ImGuiCol.SliderGrabActive, CuteTheme.AccentLavender);
+                ImGui.PushStyleColor(ImGuiCol.ScrollbarBg, CuteTheme.FrameBg);
+                ImGui.PushStyleColor(ImGuiCol.ScrollbarGrab, CuteTheme.AccentLavender);
+                ImGui.PushStyleColor(ImGuiCol.ScrollbarGrabHovered, CuteTheme.AccentPink);
+                ImGui.PushStyleColor(ImGuiCol.ScrollbarGrabActive, CuteTheme.AccentMint);
+                
+                // Update animation time safely
+                try
                 {
-                    var selectedEmote = FilteredEmotes[SelectedEmoteIndex];
-                    this.Configuration.EmoteId = selectedEmote.RowId;
-                    this.Configuration.Emote = GameEmotes.GetEmoteCommand(selectedEmote); // Keep for compatibility
-                    this.Configuration.Save();
+                    var io = ImGui.GetIO();
+                    if (io.DeltaTime > 0)
+                    {
+                        borderAnimationTime += io.DeltaTime;
+                    }
+                }
+                catch
+                {
+                    // If DeltaTime access fails, use a small increment
+                    borderAnimationTime += 0.016f; // ~60fps
                 }
             }
-
-            ImGui.Spacing();
-            ImGui.Separator();
-            ImGui.Spacing();
-
-            // Delay input
-            ImGui.Text("Idle Delay (seconds):");
-            ImGui.SetNextItemWidth(100);
-            int delay = this.Configuration.IdleDelaySeconds;
-            if (ImGui.InputInt("##Delay", ref delay, 1, 5))
+            catch (Exception ex)
             {
-                if (delay < 0) delay = 0;
-                this.Configuration.IdleDelaySeconds = delay;
-                this.Configuration.Save();
+                Service.Log?.Error($"Error in PreDraw: {ex.Message}");
             }
-            ImGui.SameLine();
-            ImGui.TextWrapped("Time to wait before performing emote after becoming idle");
-
-            ImGui.Spacing();
-            ImGui.Separator();
-            ImGui.Spacing();
-
-            // Unsheathed checkbox
-            var unsheathedConfig = this.Configuration.Unsheathed;
-            if (ImGui.Checkbox("Also perform emote while unsheathed?", ref unsheathedConfig))
+        }
+        
+        public override void PostDraw()
+        {
+            try
             {
-                this.Configuration.Unsheathed = unsheathedConfig;
-                this.Configuration.Save();
+                // Pop theme colors (18 colors pushed every frame in PreDraw)
+                for (int i = 0; i < ThemeColorCount; i++)
+                {
+                    try
+                    {
+                        ImGui.PopStyleColor();
+                    }
+                    catch
+                    {
+                        // If pop fails, stop trying
+                        break;
+                    }
+                }
+                
+                // Pop title bar colors and style var (pushed every frame in PreDraw)
+                if (ThemePushed)
+                {
+                    try
+                    {
+                        ImGui.PopStyleColor(2); // TitleBg and TitleBgActive
+                        ImGui.PopStyleVar(); // WindowPadding
+                    }
+                    catch
+                    {
+                        // If pop fails, continue
+                    }
+                }
             }
+            catch (Exception ex)
+            {
+                Service.Log?.Error($"Error in PostDraw: {ex.Message}\n{ex.StackTrace}");
+            }
+            
+            base.PostDraw();
+        }
+        
+        // Helper methods using CkGui
+        private void CenterText(string text, Vector4? color = null)
+        {
+            var textSize = ImGui.CalcTextSize(text);
+            var contentWidth = CkGui.GetWindowContentRegionWidth();
+            var offset = (contentWidth - textSize.X) / 2;
+            ImGui.SetCursorPosX(ImGui.GetCursorPosX() + offset);
+            
+            if (color.HasValue)
+            {
+                ImGui.TextColored(color.Value, text);
+            }
+            else
+            {
+                ImGui.TextUnformatted(text);
+            }
+        }
+        
+        private void DrawAnimatedBorder()
+        {
+            try
+            {
+                // Safety check - ensure we're in a valid window context
+                if (!ImGui.IsWindowHovered() && !ImGui.IsWindowFocused())
+                {
+                    // Still allow drawing, just be more careful
+                }
+                
+                var drawList = ImGui.GetWindowDrawList();
+                // Check if drawList is valid - IsNull might not exist, so use try-catch instead
+                
+                var windowPos = ImGui.GetWindowPos();
+                var windowSize = ImGui.GetWindowSize();
+                
+                // Validate window size
+                if (windowSize.X <= 0 || windowSize.Y <= 0) return;
+                
+                var borderThickness = 3f * ImGuiHelpers.GlobalScale;
+                
+                // Calculate scroll delta for border animation
+                try
+                {
+                    scrollPosition = ImGui.GetScrollY();
+                    var scrollDelta = Math.Abs(scrollPosition - lastScrollPosition);
+                    lastScrollPosition = scrollPosition;
+                    var borderColor = CuteTheme.GetBorderColor(borderAnimationTime, scrollDelta);
+                    
+                    // Draw border with rounded corners
+                    var rounding = 8f * ImGuiHelpers.GlobalScale;
+            
+                    // Top border
+                    drawList.AddLine(
+                        new Vector2(windowPos.X + rounding, windowPos.Y),
+                        new Vector2(windowPos.X + windowSize.X - rounding, windowPos.Y),
+                        ImGui.GetColorU32(borderColor),
+                        borderThickness
+                    );
+                    
+                    // Bottom border
+                    drawList.AddLine(
+                        new Vector2(windowPos.X + rounding, windowPos.Y + windowSize.Y),
+                        new Vector2(windowPos.X + windowSize.X - rounding, windowPos.Y + windowSize.Y),
+                        ImGui.GetColorU32(borderColor),
+                        borderThickness
+                    );
+                    
+                    // Left border
+                    drawList.AddLine(
+                        new Vector2(windowPos.X, windowPos.Y + rounding),
+                        new Vector2(windowPos.X, windowPos.Y + windowSize.Y - rounding),
+                        ImGui.GetColorU32(borderColor),
+                        borderThickness
+                    );
+                    
+                    // Right border
+                    drawList.AddLine(
+                        new Vector2(windowPos.X + windowSize.X, windowPos.Y + rounding),
+                        new Vector2(windowPos.X + windowSize.X, windowPos.Y + windowSize.Y - rounding),
+                        ImGui.GetColorU32(borderColor),
+                        borderThickness
+                    );
+                    
+                    // Rounded corners with cute accent colors
+                    var cornerRadius = rounding;
+                    var cornerThickness = borderThickness * 1.5f;
+                    
+                    // Top-left corner (Pink)
+                    DrawRoundedCorner(drawList, 
+                        new Vector2(windowPos.X + cornerRadius, windowPos.Y + cornerRadius),
+                        cornerRadius, 180f, 270f, CuteTheme.AccentPink, cornerThickness);
+                    
+                    // Top-right corner (Lavender)
+                    DrawRoundedCorner(drawList,
+                        new Vector2(windowPos.X + windowSize.X - cornerRadius, windowPos.Y + cornerRadius),
+                        cornerRadius, 270f, 360f, CuteTheme.AccentLavender, cornerThickness);
+                    
+                    // Bottom-left corner (Mint)
+                    DrawRoundedCorner(drawList,
+                        new Vector2(windowPos.X + cornerRadius, windowPos.Y + windowSize.Y - cornerRadius),
+                        cornerRadius, 90f, 180f, CuteTheme.AccentMint, cornerThickness);
+                    
+                    // Bottom-right corner (Peach)
+                    DrawRoundedCorner(drawList,
+                        new Vector2(windowPos.X + windowSize.X - cornerRadius, windowPos.Y + windowSize.Y - cornerRadius),
+                        cornerRadius, 0f, 90f, CuteTheme.AccentPeach, cornerThickness);
+            
+                    // Add sparkle effect on scroll (simplified, no content size needed)
+                    if (scrollDelta > 0.1f && windowSize.Y > 0)
+                    {
+                        var sparkleColor = CuteTheme.AccentSky;
+                        sparkleColor.W = 0.6f;
+                        var sparklePos = new Vector2(
+                            windowPos.X + windowSize.X * 0.5f,
+                            windowPos.Y + windowSize.Y * 0.5f
+                        );
+                        DrawSparkle(drawList, sparklePos, sparkleColor);
+                    }
+                }
+                catch
+                {
+                    // If scroll access fails, skip sparkle
+                }
+            }
+            catch (Exception ex)
+            {
+                Service.Log?.Error($"Error drawing border: {ex.Message}");
+            }
+        }
+        
+        private void DrawRoundedCorner(ImDrawListPtr drawList, Vector2 center, float radius, float startAngle, float endAngle, Vector4 color, float thickness)
+        {
+            var segments = 8;
+            var angleStep = (endAngle - startAngle) / segments;
+            var prevPoint = center + new Vector2(
+                radius * (float)Math.Cos(startAngle * Math.PI / 180f),
+                radius * (float)Math.Sin(startAngle * Math.PI / 180f)
+            );
+            
+            for (int i = 1; i <= segments; i++)
+            {
+                var angle = startAngle + angleStep * i;
+                var point = center + new Vector2(
+                    radius * (float)Math.Cos(angle * Math.PI / 180f),
+                    radius * (float)Math.Sin(angle * Math.PI / 180f)
+                );
+                drawList.AddLine(prevPoint, point, ImGui.GetColorU32(color), thickness);
+                prevPoint = point;
+            }
+        }
+        
+        private void DrawSparkle(ImDrawListPtr drawList, Vector2 center, Vector4 color)
+        {
+            var size = 4f * ImGuiHelpers.GlobalScale;
+            var points = new[]
+            {
+                center + new Vector2(0, -size),
+                center + new Vector2(size * 0.5f, -size * 0.5f),
+                center + new Vector2(size, 0),
+                center + new Vector2(size * 0.5f, size * 0.5f),
+                center + new Vector2(0, size),
+                center + new Vector2(-size * 0.5f, size * 0.5f),
+                center + new Vector2(-size, 0),
+                center + new Vector2(-size * 0.5f, -size * 0.5f)
+            };
+            
+            for (int i = 0; i < points.Length; i++)
+            {
+                var next = (i + 1) % points.Length;
+                drawList.AddLine(points[i], points[next], ImGui.GetColorU32(color), 2f);
+            }
+        }
+        
+        private void DrawCuteSeparator()
+        {
+            // Cute separator with gradient
+            var separatorStart = ImGui.GetCursorScreenPos();
+            var separatorWidth = ImGui.GetContentRegionAvail().X;
+            var drawList = ImGui.GetWindowDrawList();
+            var gradientStart = CuteTheme.AccentPink;
+            var gradientEnd = CuteTheme.AccentLavender;
+            for (int i = 0; i < separatorWidth; i++)
+            {
+                var t = i / separatorWidth;
+                var color = new Vector4(
+                    gradientStart.X * (1 - t) + gradientEnd.X * t,
+                    gradientStart.Y * (1 - t) + gradientEnd.Y * t,
+                    gradientStart.Z * (1 - t) + gradientEnd.Z * t,
+                    0.5f
+                );
+                drawList.AddLine(
+                    separatorStart + new Vector2(i, 0),
+                    separatorStart + new Vector2(i, 1),
+                    ImGui.GetColorU32(color),
+                    1f
+                );
+            }
+            ImGui.Dummy(new Vector2(0, 2));
+        }
+        
+        public override void Draw()
+        {
+            try
+            {
+                var windowContentWidth = CkGui.GetWindowContentRegionWidth();
+                
+                // Compact layout - all settings in one main box with proper sizing
+                using (ImRaii.PushStyle(ImGuiStyleVar.ChildRounding, 4f))
+                using (ImRaii.PushColor(ImGuiCol.Border, ImGuiColors.ParsedPink))
+                using (var mainBox = ImRaii.Child("MainSettingsBox", new Vector2(windowContentWidth, 0), true, ImGuiWindowFlags.None))
+                {
+                    if (mainBox)
+                    {
+                        var innerWidth = ImGui.GetContentRegionAvail().X;
+                        var frameHeight = ImGui.GetFrameHeight();
+                        var itemSpacing = ImGui.GetStyle().ItemSpacing.Y;
+                        
+                        // Emote selection section with colored border (compact, vertically centered)
+                        using (ImRaii.PushStyle(ImGuiStyleVar.ChildRounding, 3f))
+                        using (ImRaii.PushColor(ImGuiCol.Border, ImGuiColors.ParsedPink))
+                        using (var emoteBox = ImRaii.Child("EmoteSection", new Vector2(innerWidth, frameHeight * 3f), true, ImGuiWindowFlags.None))
+                        {
+                            if (emoteBox)
+                            {
+                                try
+                                {
+                                    var emoteHeight = ImGui.GetContentRegionAvail().Y;
+                                    var emoteContentHeight = frameHeight * 2f; // Label + combo
+                                    if (emoteHeight > emoteContentHeight)
+                                    {
+                                        var emoteOffsetY = (emoteHeight - emoteContentHeight) / 2f;
+                                        ImGui.SetCursorPosY(ImGui.GetCursorPosY() + emoteOffsetY);
+                                    }
+                                }
+                                catch
+                                {
+                                    // If centering fails, just draw normally
+                                }
+                                
+                                CkGui.ColorText("Select Emote:", ImGuiColors.ParsedPink);
+                                DrawComboEmote("EmoteSelect");
+                            }
+                        }
 
-            // Legend
-            ImGui.Spacing();
-            ImGui.Separator();
-            ImGui.Spacing();
-            ImGui.TextColored(new Vector4(0, 1, 0, 1), "[✓] = Unlocked");
-            ImGui.SameLine();
-            ImGui.TextColored(new Vector4(1, 0, 0, 1), "[✗] = Locked");
+                        ImGui.Spacing();
+
+                        // Delay input section with colored border (compact, inline, vertically centered)
+                        using (ImRaii.PushStyle(ImGuiStyleVar.ChildRounding, 3f))
+                        using (ImRaii.PushColor(ImGuiCol.Border, ImGuiColors.ParsedGold))
+                        using (var delayBox = ImRaii.Child("DelaySection", new Vector2(innerWidth, frameHeight * 2f), true, ImGuiWindowFlags.None))
+                        {
+                            if (delayBox)
+                            {
+                                try
+                                {
+                                    var delayHeight = ImGui.GetContentRegionAvail().Y;
+                                    var delayContentHeight = frameHeight;
+                                    if (delayHeight > delayContentHeight)
+                                    {
+                                        var delayOffsetY = (delayHeight - delayContentHeight) / 2f;
+                                        ImGui.SetCursorPosY(ImGui.GetCursorPosY() + delayOffsetY);
+                                    }
+                                }
+                                catch
+                                {
+                                    // If centering fails, just draw normally
+                                }
+                                
+                                CkGui.ColorText("Idle Delay (seconds):", ImGuiColors.ParsedGold);
+                                ImGui.SameLine();
+                                ImGui.SetNextItemWidth(80);
+                                int delay = this.Configuration.IdleDelaySeconds;
+                                if (ImGui.InputInt("##Delay", ref delay, 1, 5))
+                                {
+                                    if (delay < 0) delay = 0;
+                                    this.Configuration.IdleDelaySeconds = delay;
+                                    this.Configuration.Save();
+                                }
+                                ImGui.SameLine();
+                                CkGui.ColorText("(Time before emote)", ImGuiColors.DalamudGrey);
+                                CkGui.AttachToolTip("The number of seconds to wait after becoming idle before the emote is performed");
+                            }
+                        }
+
+                        ImGui.Spacing();
+
+                        // Options section with colored border (enough height for all checkboxes, no scrollbar)
+                        using (ImRaii.PushStyle(ImGuiStyleVar.ChildRounding, 3f))
+                        using (ImRaii.PushColor(ImGuiCol.Border, CuteTheme.AccentLavender))
+                        using (var optionsBox = ImRaii.Child("OptionsSection", new Vector2(innerWidth, frameHeight * 4.5f + itemSpacing * 3f), true, ImGuiWindowFlags.None))
+                        {
+                            if (optionsBox)
+                            {
+                                try
+                                {
+                                    var optionsHeight = ImGui.GetContentRegionAvail().Y;
+                                    var optionsContentHeight = frameHeight * 2f + itemSpacing * 2f; // Label + 2 checkboxes with spacing
+                                    if (optionsHeight > optionsContentHeight)
+                                    {
+                                        var optionsOffsetY = (optionsHeight - optionsContentHeight) / 2f;
+                                        ImGui.SetCursorPosY(ImGui.GetCursorPosY() + optionsOffsetY);
+                                    }
+                                }
+                                catch
+                                {
+                                    // If centering fails, just draw normally
+                                }
+                                
+                                CkGui.ColorText("Options:", CuteTheme.AccentLavender);
+                                
+                                // Unsheathed checkbox
+                                var unsheathedConfig = this.Configuration.Unsheathed;
+                                if (ImGui.Checkbox("Also perform emote while unsheathed?", ref unsheathedConfig))
+                                {
+                                    this.Configuration.Unsheathed = unsheathedConfig;
+                                    this.Configuration.Save();
+                                }
+                                CkGui.AttachToolTip("If checked, the plugin will also perform emotes when your weapon is unsheathed.");
+
+                                // Hide locked emotes toggle
+                                var hideLockedConfig = this.Configuration.HideLockedEmotes;
+                                if (ImGui.Checkbox("Hide locked emotes", ref hideLockedConfig))
+                                {
+                                    this.Configuration.HideLockedEmotes = hideLockedConfig;
+                                    this.Configuration.Save();
+                                    UpdateEmoteList(); // Refresh the list when toggle changes
+                                }
+                                CkGui.AttachToolTip("If checked, locked emotes will not appear in the selection list.");
+                            }
+                        }
+
+                        ImGui.Spacing();
+
+                        // Legend section with colored border (compact, centered)
+                        using (ImRaii.PushStyle(ImGuiStyleVar.ChildRounding, 3f))
+                        using (ImRaii.PushColor(ImGuiCol.Border, CuteTheme.AccentMint))
+                        using (var legendBox = ImRaii.Child("LegendSection", new Vector2(innerWidth, frameHeight * 1.5f), true, ImGuiWindowFlags.None))
+                        {
+                            if (legendBox)
+                            {
+                                try
+                                {
+                                    var legendHeight = ImGui.GetContentRegionAvail().Y;
+                                    var legendContentHeight = frameHeight;
+                                    if (legendHeight > legendContentHeight)
+                                    {
+                                        var legendOffsetY = (legendHeight - legendContentHeight) / 2f;
+                                        ImGui.SetCursorPosY(ImGui.GetCursorPosY() + legendOffsetY);
+                                    }
+                                    
+                                    // Center the legend text horizontally
+                                    var unlockedText = "[✓] = Unlocked";
+                                    var lockedText = "[✗] = Locked";
+                                    var unlockedSize = ImGui.CalcTextSize(unlockedText);
+                                    var lockedSize = ImGui.CalcTextSize(lockedText);
+                                    var totalWidth = unlockedSize.X + lockedSize.X + ImGui.GetStyle().ItemSpacing.X;
+                                    var legendWidth = ImGui.GetContentRegionAvail().X;
+                                    var startX = (legendWidth - totalWidth) / 2;
+                                    ImGui.SetCursorPosX(ImGui.GetCursorPosX() + startX);
+                                }
+                                catch
+                                {
+                                    // If centering fails, just draw normally
+                                }
+                                
+                                CkGui.ColorText("[✓] = Unlocked", CuteTheme.AccentMint);
+                                ImGui.SameLine();
+                                CkGui.ColorText("[✗] = Locked", CuteTheme.AccentPink);
+                            }
+                        }
+                    }
+                }
+                
+                // Draw animated border at the end when window is fully rendered
+                DrawAnimatedBorder();
+            }
+            catch (Exception ex)
+            {
+                Service.Log?.Error($"Error in Draw: {ex.Message}\n{ex.StackTrace}");
+            }
         }
 
         public void Dispose() { }

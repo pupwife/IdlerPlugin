@@ -8,7 +8,7 @@
     <Author>pupwife</Author>
     <Name>Idler</Name>
     <InternalName>Idler</InternalName>
-    <AssemblyVersion>1.2.0.0</AssemblyVersion>
+    <AssemblyVersion>2.0.0.0</AssemblyVersion>
     <MinimumDalamudVersion>14.0.0</MinimumDalamudVersion>
     <Punchline>Automatically plays an emote when you start idling in FFXIV</Punchline>
     <Description>Automatically plays an emote when you start idling in FFXIV</Description>
@@ -19,5 +19,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\ECommons\ECommons\ECommons.csproj" />
+    <ProjectReference Include="..\CkCommons\CkCommons.csproj" />
+    <ProjectReference Include="..\OtterGui\OtterGui.csproj" />
   </ItemGroup>
 </Project>
