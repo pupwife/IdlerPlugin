@@ -368,41 +368,17 @@ namespace Idler
             public static readonly Vector4 ButtonActive = new Vector4(0.45f, 0.35f, 0.52f, 1.0f);
         }
         
-        private const int ThemeColorCount = 18; // Theme colors pushed every frame
-        private bool ThemePushed = false;
-        
         public override void PreDraw()
         {
             base.PreDraw();
             
             try
             {
-                // GagSpeak-style title bar colors (pink/magenta theme) - push every frame
+                // Only push title bar colors here (needed before window creation)
+                // These will be popped in PostDraw to prevent affecting other windows
                 ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, new Vector2(ImGui.GetStyle().WindowPadding.X, 0));
                 ImGui.PushStyleColor(ImGuiCol.TitleBg, new Vector4(0.331f, 0.081f, 0.169f, 0.803f));
                 ImGui.PushStyleColor(ImGuiCol.TitleBgActive, new Vector4(0.579f, 0.170f, 0.359f, 0.828f));
-                ThemePushed = true;
-                
-                // Apply cute dark mode theme
-                ImGui.PushStyleColor(ImGuiCol.WindowBg, CuteTheme.WindowBg);
-                ImGui.PushStyleColor(ImGuiCol.ChildBg, CuteTheme.ChildBg);
-                ImGui.PushStyleColor(ImGuiCol.FrameBg, CuteTheme.FrameBg);
-                ImGui.PushStyleColor(ImGuiCol.FrameBgHovered, CuteTheme.FrameBgHovered);
-                ImGui.PushStyleColor(ImGuiCol.FrameBgActive, CuteTheme.FrameBgActive);
-                ImGui.PushStyleColor(ImGuiCol.Text, CuteTheme.Text);
-                ImGui.PushStyleColor(ImGuiCol.Button, CuteTheme.Button);
-                ImGui.PushStyleColor(ImGuiCol.ButtonHovered, CuteTheme.ButtonHovered);
-                ImGui.PushStyleColor(ImGuiCol.ButtonActive, CuteTheme.ButtonActive);
-                ImGui.PushStyleColor(ImGuiCol.Header, CuteTheme.FrameBgHovered);
-                ImGui.PushStyleColor(ImGuiCol.HeaderHovered, CuteTheme.AccentLavender);
-                ImGui.PushStyleColor(ImGuiCol.HeaderActive, CuteTheme.AccentPink);
-                ImGui.PushStyleColor(ImGuiCol.CheckMark, CuteTheme.AccentMint);
-                ImGui.PushStyleColor(ImGuiCol.SliderGrab, CuteTheme.AccentPink);
-                ImGui.PushStyleColor(ImGuiCol.SliderGrabActive, CuteTheme.AccentLavender);
-                ImGui.PushStyleColor(ImGuiCol.ScrollbarBg, CuteTheme.FrameBg);
-                ImGui.PushStyleColor(ImGuiCol.ScrollbarGrab, CuteTheme.AccentLavender);
-                ImGui.PushStyleColor(ImGuiCol.ScrollbarGrabHovered, CuteTheme.AccentPink);
-                ImGui.PushStyleColor(ImGuiCol.ScrollbarGrabActive, CuteTheme.AccentMint);
                 
                 // Update animation time safely
                 try
@@ -429,33 +405,10 @@ namespace Idler
         {
             try
             {
-                // Pop theme colors (18 colors pushed every frame in PreDraw)
-                for (int i = 0; i < ThemeColorCount; i++)
-                {
-                    try
-                    {
-                        ImGui.PopStyleColor();
-                    }
-                    catch
-                    {
-                        // If pop fails, stop trying
-                        break;
-                    }
-                }
-                
-                // Pop title bar colors and style var (pushed every frame in PreDraw)
-                if (ThemePushed)
-                {
-                    try
-                    {
-                        ImGui.PopStyleColor(2); // TitleBg and TitleBgActive
-                        ImGui.PopStyleVar(); // WindowPadding
-                    }
-                    catch
-                    {
-                        // If pop fails, continue
-                    }
-                }
+                // Pop title bar colors and style var (pushed in PreDraw)
+                // This ensures they don't leak to other windows
+                ImGui.PopStyleColor(2); // TitleBg and TitleBgActive
+                ImGui.PopStyleVar(); // WindowPadding
             }
             catch (Exception ex)
             {
@@ -668,170 +621,216 @@ namespace Idler
         {
             try
             {
-                var windowContentWidth = CkGui.GetWindowContentRegionWidth();
-                
-                // Compact layout - all settings in one main box with proper sizing
-                using (ImRaii.PushStyle(ImGuiStyleVar.ChildRounding, 4f))
-                using (ImRaii.PushColor(ImGuiCol.Border, ImGuiColors.ParsedPink))
-                using (var mainBox = ImRaii.Child("MainSettingsBox", new Vector2(windowContentWidth, 0), true, ImGuiWindowFlags.None))
+                // Apply theme colors only to this window using ImRaii scopes
+                // This ensures they don't leak to other windows
+                using (ImRaii.PushColor(ImGuiCol.WindowBg, CuteTheme.WindowBg))
+                using (ImRaii.PushColor(ImGuiCol.ChildBg, CuteTheme.ChildBg))
+                using (ImRaii.PushColor(ImGuiCol.FrameBg, CuteTheme.FrameBg))
+                using (ImRaii.PushColor(ImGuiCol.FrameBgHovered, CuteTheme.FrameBgHovered))
+                using (ImRaii.PushColor(ImGuiCol.FrameBgActive, CuteTheme.FrameBgActive))
+                using (ImRaii.PushColor(ImGuiCol.Text, CuteTheme.Text))
+                using (ImRaii.PushColor(ImGuiCol.Button, CuteTheme.Button))
+                using (ImRaii.PushColor(ImGuiCol.ButtonHovered, CuteTheme.ButtonHovered))
+                using (ImRaii.PushColor(ImGuiCol.ButtonActive, CuteTheme.ButtonActive))
+                using (ImRaii.PushColor(ImGuiCol.Header, CuteTheme.FrameBgHovered))
+                using (ImRaii.PushColor(ImGuiCol.HeaderHovered, CuteTheme.AccentLavender))
+                using (ImRaii.PushColor(ImGuiCol.HeaderActive, CuteTheme.AccentPink))
+                using (ImRaii.PushColor(ImGuiCol.CheckMark, CuteTheme.AccentMint))
+                using (ImRaii.PushColor(ImGuiCol.SliderGrab, CuteTheme.AccentPink))
+                using (ImRaii.PushColor(ImGuiCol.SliderGrabActive, CuteTheme.AccentLavender))
+                using (ImRaii.PushColor(ImGuiCol.ScrollbarBg, CuteTheme.FrameBg))
+                using (ImRaii.PushColor(ImGuiCol.ScrollbarGrab, CuteTheme.AccentLavender))
+                using (ImRaii.PushColor(ImGuiCol.ScrollbarGrabHovered, CuteTheme.AccentPink))
+                using (ImRaii.PushColor(ImGuiCol.ScrollbarGrabActive, CuteTheme.AccentMint))
                 {
-                    if (mainBox)
+                    var windowContentWidth = CkGui.GetWindowContentRegionWidth();
+                    var windowContentHeight = ImGui.GetContentRegionAvail().Y;
+                    
+                    // Calculate responsive heights based on available space
+                    var frameHeight = ImGui.GetFrameHeight();
+                    var itemSpacing = ImGui.GetStyle().ItemSpacing.Y;
+                    var windowPadding = ImGui.GetStyle().WindowPadding.Y;
+                    
+                    // Minimum heights for each section
+                    var minEmoteHeight = frameHeight * 3f;
+                    var minDelayHeight = frameHeight * 2f;
+                    var minOptionsHeight = frameHeight * 4.5f + itemSpacing * 3f;
+                    var minLegendHeight = frameHeight * 1.5f;
+                    
+                    // Total minimum height needed
+                    var totalMinHeight = minEmoteHeight + minDelayHeight + minOptionsHeight + minLegendHeight + itemSpacing * 3f;
+                    
+                    // Calculate available height for distribution
+                    var availableHeight = Math.Max(windowContentHeight, totalMinHeight);
+                    var extraHeight = Math.Max(0, availableHeight - totalMinHeight);
+                    
+                    // Distribute extra height proportionally (emote section gets more space)
+                    var emoteHeight = minEmoteHeight + extraHeight * 0.3f;
+                    var delayHeight = minDelayHeight + extraHeight * 0.1f;
+                    var optionsHeight = minOptionsHeight + extraHeight * 0.4f;
+                    var legendHeight = minLegendHeight + extraHeight * 0.2f;
+                    
+                    // Compact layout - all settings in one main box with responsive sizing
+                    using (ImRaii.PushStyle(ImGuiStyleVar.ChildRounding, 4f))
+                    using (ImRaii.PushColor(ImGuiCol.Border, ImGuiColors.ParsedPink))
+                    using (var mainBox = ImRaii.Child("MainSettingsBox", new Vector2(windowContentWidth, 0), true, ImGuiWindowFlags.None))
                     {
-                        var innerWidth = ImGui.GetContentRegionAvail().X;
-                        var frameHeight = ImGui.GetFrameHeight();
-                        var itemSpacing = ImGui.GetStyle().ItemSpacing.Y;
-                        
-                        // Emote selection section with colored border (compact, vertically centered)
-                        using (ImRaii.PushStyle(ImGuiStyleVar.ChildRounding, 3f))
-                        using (ImRaii.PushColor(ImGuiCol.Border, ImGuiColors.ParsedPink))
-                        using (var emoteBox = ImRaii.Child("EmoteSection", new Vector2(innerWidth, frameHeight * 3f), true, ImGuiWindowFlags.None))
+                        if (mainBox)
                         {
-                            if (emoteBox)
+                            var innerWidth = ImGui.GetContentRegionAvail().X;
+                            
+                            // Emote selection section with colored border (responsive, vertically centered)
+                            using (ImRaii.PushStyle(ImGuiStyleVar.ChildRounding, 3f))
+                            using (ImRaii.PushColor(ImGuiCol.Border, ImGuiColors.ParsedPink))
+                            using (var emoteBox = ImRaii.Child("EmoteSection", new Vector2(innerWidth, emoteHeight), true, ImGuiWindowFlags.None))
                             {
-                                try
+                                if (emoteBox)
                                 {
-                                    var emoteHeight = ImGui.GetContentRegionAvail().Y;
-                                    var emoteContentHeight = frameHeight * 2f; // Label + combo
-                                    if (emoteHeight > emoteContentHeight)
+                                    try
                                     {
-                                        var emoteOffsetY = (emoteHeight - emoteContentHeight) / 2f;
-                                        ImGui.SetCursorPosY(ImGui.GetCursorPosY() + emoteOffsetY);
+                                        var emoteBoxHeight = ImGui.GetContentRegionAvail().Y;
+                                        var emoteContentHeight = frameHeight * 2f; // Label + combo
+                                        if (emoteBoxHeight > emoteContentHeight)
+                                        {
+                                            var emoteOffsetY = (emoteBoxHeight - emoteContentHeight) / 2f;
+                                            ImGui.SetCursorPosY(ImGui.GetCursorPosY() + emoteOffsetY);
+                                        }
                                     }
-                                }
-                                catch
-                                {
-                                    // If centering fails, just draw normally
-                                }
-                                
-                                CkGui.ColorText("Select Emote:", ImGuiColors.ParsedPink);
-                                DrawComboEmote("EmoteSelect");
-                            }
-                        }
-
-                        ImGui.Spacing();
-
-                        // Delay input section with colored border (compact, inline, vertically centered)
-                        using (ImRaii.PushStyle(ImGuiStyleVar.ChildRounding, 3f))
-                        using (ImRaii.PushColor(ImGuiCol.Border, ImGuiColors.ParsedGold))
-                        using (var delayBox = ImRaii.Child("DelaySection", new Vector2(innerWidth, frameHeight * 2f), true, ImGuiWindowFlags.None))
-                        {
-                            if (delayBox)
-                            {
-                                try
-                                {
-                                    var delayHeight = ImGui.GetContentRegionAvail().Y;
-                                    var delayContentHeight = frameHeight;
-                                    if (delayHeight > delayContentHeight)
+                                    catch
                                     {
-                                        var delayOffsetY = (delayHeight - delayContentHeight) / 2f;
-                                        ImGui.SetCursorPosY(ImGui.GetCursorPosY() + delayOffsetY);
-                                    }
-                                }
-                                catch
-                                {
-                                    // If centering fails, just draw normally
-                                }
-                                
-                                CkGui.ColorText("Idle Delay (seconds):", ImGuiColors.ParsedGold);
-                                ImGui.SameLine();
-                                ImGui.SetNextItemWidth(80);
-                                int delay = this.Configuration.IdleDelaySeconds;
-                                if (ImGui.InputInt("##Delay", ref delay, 1, 5))
-                                {
-                                    if (delay < 0) delay = 0;
-                                    this.Configuration.IdleDelaySeconds = delay;
-                                    this.Configuration.Save();
-                                }
-                                ImGui.SameLine();
-                                CkGui.ColorText("(Time before emote)", ImGuiColors.DalamudGrey);
-                                CkGui.AttachToolTip("The number of seconds to wait after becoming idle before the emote is performed");
-                            }
-                        }
-
-                        ImGui.Spacing();
-
-                        // Options section with colored border (enough height for all checkboxes, no scrollbar)
-                        using (ImRaii.PushStyle(ImGuiStyleVar.ChildRounding, 3f))
-                        using (ImRaii.PushColor(ImGuiCol.Border, CuteTheme.AccentLavender))
-                        using (var optionsBox = ImRaii.Child("OptionsSection", new Vector2(innerWidth, frameHeight * 4.5f + itemSpacing * 3f), true, ImGuiWindowFlags.None))
-                        {
-                            if (optionsBox)
-                            {
-                                try
-                                {
-                                    var optionsHeight = ImGui.GetContentRegionAvail().Y;
-                                    var optionsContentHeight = frameHeight * 2f + itemSpacing * 2f; // Label + 2 checkboxes with spacing
-                                    if (optionsHeight > optionsContentHeight)
-                                    {
-                                        var optionsOffsetY = (optionsHeight - optionsContentHeight) / 2f;
-                                        ImGui.SetCursorPosY(ImGui.GetCursorPosY() + optionsOffsetY);
-                                    }
-                                }
-                                catch
-                                {
-                                    // If centering fails, just draw normally
-                                }
-                                
-                                CkGui.ColorText("Options:", CuteTheme.AccentLavender);
-                                
-                                // Unsheathed checkbox
-                                var unsheathedConfig = this.Configuration.Unsheathed;
-                                if (ImGui.Checkbox("Also perform emote while unsheathed?", ref unsheathedConfig))
-                                {
-                                    this.Configuration.Unsheathed = unsheathedConfig;
-                                    this.Configuration.Save();
-                                }
-                                CkGui.AttachToolTip("If checked, the plugin will also perform emotes when your weapon is unsheathed.");
-
-                                // Hide locked emotes toggle
-                                var hideLockedConfig = this.Configuration.HideLockedEmotes;
-                                if (ImGui.Checkbox("Hide locked emotes", ref hideLockedConfig))
-                                {
-                                    this.Configuration.HideLockedEmotes = hideLockedConfig;
-                                    this.Configuration.Save();
-                                    UpdateEmoteList(); // Refresh the list when toggle changes
-                                }
-                                CkGui.AttachToolTip("If checked, locked emotes will not appear in the selection list.");
-                            }
-                        }
-
-                        ImGui.Spacing();
-
-                        // Legend section with colored border (compact, centered)
-                        using (ImRaii.PushStyle(ImGuiStyleVar.ChildRounding, 3f))
-                        using (ImRaii.PushColor(ImGuiCol.Border, CuteTheme.AccentMint))
-                        using (var legendBox = ImRaii.Child("LegendSection", new Vector2(innerWidth, frameHeight * 1.5f), true, ImGuiWindowFlags.None))
-                        {
-                            if (legendBox)
-                            {
-                                try
-                                {
-                                    var legendHeight = ImGui.GetContentRegionAvail().Y;
-                                    var legendContentHeight = frameHeight;
-                                    if (legendHeight > legendContentHeight)
-                                    {
-                                        var legendOffsetY = (legendHeight - legendContentHeight) / 2f;
-                                        ImGui.SetCursorPosY(ImGui.GetCursorPosY() + legendOffsetY);
+                                        // If centering fails, just draw normally
                                     }
                                     
-                                    // Center the legend text horizontally
-                                    var unlockedText = "[✓] = Unlocked";
-                                    var lockedText = "[✗] = Locked";
-                                    var unlockedSize = ImGui.CalcTextSize(unlockedText);
-                                    var lockedSize = ImGui.CalcTextSize(lockedText);
-                                    var totalWidth = unlockedSize.X + lockedSize.X + ImGui.GetStyle().ItemSpacing.X;
-                                    var legendWidth = ImGui.GetContentRegionAvail().X;
-                                    var startX = (legendWidth - totalWidth) / 2;
-                                    ImGui.SetCursorPosX(ImGui.GetCursorPosX() + startX);
+                                    CkGui.ColorText("Select Emote:", ImGuiColors.ParsedPink);
+                                    DrawComboEmote("EmoteSelect");
                                 }
-                                catch
+                            }
+
+                            ImGui.Spacing();
+
+                            // Delay input section with colored border (responsive, inline, vertically centered)
+                            using (ImRaii.PushStyle(ImGuiStyleVar.ChildRounding, 3f))
+                            using (ImRaii.PushColor(ImGuiCol.Border, ImGuiColors.ParsedGold))
+                            using (var delayBox = ImRaii.Child("DelaySection", new Vector2(innerWidth, delayHeight), true, ImGuiWindowFlags.None))
+                            {
+                                if (delayBox)
                                 {
-                                    // If centering fails, just draw normally
+                                    try
+                                    {
+                                        var delayBoxHeight = ImGui.GetContentRegionAvail().Y;
+                                        var delayContentHeight = frameHeight;
+                                        if (delayBoxHeight > delayContentHeight)
+                                        {
+                                            var delayOffsetY = (delayBoxHeight - delayContentHeight) / 2f;
+                                            ImGui.SetCursorPosY(ImGui.GetCursorPosY() + delayOffsetY);
+                                        }
+                                    }
+                                    catch
+                                    {
+                                        // If centering fails, just draw normally
+                                    }
+                                    
+                                    CkGui.ColorText("Idle Delay (seconds):", ImGuiColors.ParsedGold);
+                                    ImGui.SameLine();
+                                    ImGui.SetNextItemWidth(80);
+                                    int delay = this.Configuration.IdleDelaySeconds;
+                                    if (ImGui.InputInt("##Delay", ref delay, 1, 5))
+                                    {
+                                        if (delay < 0) delay = 0;
+                                        this.Configuration.IdleDelaySeconds = delay;
+                                        this.Configuration.Save();
+                                    }
+                                    ImGui.SameLine();
+                                    CkGui.ColorText("(Time before emote)", ImGuiColors.DalamudGrey);
+                                    CkGui.AttachToolTip("The number of seconds to wait after becoming idle before the emote is performed");
                                 }
-                                
-                                CkGui.ColorText("[✓] = Unlocked", CuteTheme.AccentMint);
-                                ImGui.SameLine();
-                                CkGui.ColorText("[✗] = Locked", CuteTheme.AccentPink);
+                            }
+
+                            ImGui.Spacing();
+
+                            // Options section with colored border (responsive, enough height for all checkboxes, no scrollbar)
+                            using (ImRaii.PushStyle(ImGuiStyleVar.ChildRounding, 3f))
+                            using (ImRaii.PushColor(ImGuiCol.Border, CuteTheme.AccentLavender))
+                            using (var optionsBox = ImRaii.Child("OptionsSection", new Vector2(innerWidth, optionsHeight), true, ImGuiWindowFlags.None))
+                            {
+                                if (optionsBox)
+                                {
+                                    try
+                                    {
+                                        var optionsBoxHeight = ImGui.GetContentRegionAvail().Y;
+                                        var optionsContentHeight = frameHeight * 2f + itemSpacing * 2f; // Label + 2 checkboxes with spacing
+                                        if (optionsBoxHeight > optionsContentHeight)
+                                        {
+                                            var optionsOffsetY = (optionsBoxHeight - optionsContentHeight) / 2f;
+                                            ImGui.SetCursorPosY(ImGui.GetCursorPosY() + optionsOffsetY);
+                                        }
+                                    }
+                                    catch
+                                    {
+                                        // If centering fails, just draw normally
+                                    }
+                                    
+                                    CkGui.ColorText("Options:", CuteTheme.AccentLavender);
+                                    
+                                    // Unsheathed checkbox
+                                    var unsheathedConfig = this.Configuration.Unsheathed;
+                                    if (ImGui.Checkbox("Also perform emote while unsheathed?", ref unsheathedConfig))
+                                    {
+                                        this.Configuration.Unsheathed = unsheathedConfig;
+                                        this.Configuration.Save();
+                                    }
+                                    CkGui.AttachToolTip("If checked, the plugin will also perform emotes when your weapon is unsheathed.");
+
+                                    // Hide locked emotes toggle
+                                    var hideLockedConfig = this.Configuration.HideLockedEmotes;
+                                    if (ImGui.Checkbox("Hide locked emotes", ref hideLockedConfig))
+                                    {
+                                        this.Configuration.HideLockedEmotes = hideLockedConfig;
+                                        this.Configuration.Save();
+                                        UpdateEmoteList(); // Refresh the list when toggle changes
+                                    }
+                                    CkGui.AttachToolTip("If checked, locked emotes will not appear in the selection list.");
+                                }
+                            }
+
+                            ImGui.Spacing();
+
+                            // Legend section with colored border (responsive, centered)
+                            using (ImRaii.PushStyle(ImGuiStyleVar.ChildRounding, 3f))
+                            using (ImRaii.PushColor(ImGuiCol.Border, CuteTheme.AccentMint))
+                            using (var legendBox = ImRaii.Child("LegendSection", new Vector2(innerWidth, legendHeight), true, ImGuiWindowFlags.None))
+                            {
+                                if (legendBox)
+                                {
+                                    try
+                                    {
+                                        var legendBoxHeight = ImGui.GetContentRegionAvail().Y;
+                                        var legendContentHeight = frameHeight;
+                                        if (legendBoxHeight > legendContentHeight)
+                                        {
+                                            var legendOffsetY = (legendBoxHeight - legendContentHeight) / 2f;
+                                            ImGui.SetCursorPosY(ImGui.GetCursorPosY() + legendOffsetY);
+                                        }
+                                        
+                                        // Center the legend text horizontally
+                                        var unlockedText = "[✓] = Unlocked";
+                                        var lockedText = "[✗] = Locked";
+                                        var unlockedSize = ImGui.CalcTextSize(unlockedText);
+                                        var lockedSize = ImGui.CalcTextSize(lockedText);
+                                        var totalWidth = unlockedSize.X + lockedSize.X + ImGui.GetStyle().ItemSpacing.X;
+                                        var legendWidth = ImGui.GetContentRegionAvail().X;
+                                        var startX = (legendWidth - totalWidth) / 2;
+                                        ImGui.SetCursorPosX(ImGui.GetCursorPosX() + startX);
+                                    }
+                                    catch
+                                    {
+                                        // If centering fails, just draw normally
+                                    }
+                                    
+                                    CkGui.ColorText("[✓] = Unlocked", CuteTheme.AccentMint);
+                                    ImGui.SameLine();
+                                    CkGui.ColorText("[✗] = Locked", CuteTheme.AccentPink);
+                                }
                             }
                         }
                     }
